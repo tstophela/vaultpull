@@ -70,3 +70,14 @@ func TestStrategy_Apply_EmptyExisting(t *testing.T) {
 		t.Errorf("expected 2 keys, got %d", len(result))
 	}
 }
+
+func TestStrategy_Apply_EmptyIncoming(t *testing.T) {
+	existing := map[string]string{"A": "1", "B": "2"}
+	result := StrategyOverwrite.Apply(existing, nil)
+	if len(result) != 2 {
+		t.Errorf("expected 2 keys, got %d", len(result))
+	}
+	if result["A"] != "1" || result["B"] != "2" {
+		t.Errorf("expected existing keys to be preserved, got %v", result)
+	}
+}
