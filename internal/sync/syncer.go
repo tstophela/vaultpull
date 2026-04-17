@@ -1,54 +1,54 @@
 package sync
 
 import (
-	"fmt"
-	"log"
+	"context"
+	"time"
 
-	"github.com/your-org/vaultpull/internal/env"
-	"github.com/your-org/vaultpull/internal/vault"
+	"github.com/user/vaultpull/internal/env"
 )
 
-// Result holds the outcome of a sync operation.
-type Result struct {
-	Path       string
-	Keyssynced int
-	BackedUp   bool
-	OutputFile string
+// VaultReader is the interface for reading secrets from Vault.
+type VaultReader interface {
+	ReadSecrets(ctx context.Context, path string) (map[string]string, error)
 }
 
-// Syncer orchestrates reading secrets from Vault and writing them to a .env file.
+// Syncer orchestrates reading from Vault and writing to a .env file.
 type Syncer struct {
-	client *vault.Client
+	vault  VaultReader
 	writer *env.Writer
+	reader *env.Reader
+	audit  *env.AuditLogger
 }
 
-// New creates a new Syncer.
-func New(client *vault.Client, writer *env.Writer) *Syncer {
-	return &Syncer{client: client, writer: writer}
+// New creates a Syncer with the provided dependencies.
+func New(v VaultReader, w *env.Writer, r *env.Reader, a *env.AuditLogger) *Syncer {
+	return &Syncer{vault: v, writer: w, reader: r, audit: a}
 }
 
-// Sync reads secrets from the given Vault path and writes them to outFile.
-func (s *Syncer) Sync(mountPath, secretPath, outFile string, backup bool) (*Result, error) {
-	normalized := vault.NormalizePath(mountPath, secretPath)
-
-	secrets, err := s.client.ReadSecrets(normalized)
+// Sync reads secrets from path and merges them into the target file.
+func (s *Syncer) Sync(ctx context.Context, path, targetFile string) error {
+	incoming, err := s.vault.ReadSecrets(ctx, path)
 	if err != nil {
-		return nil, fmt.Errorf("reading secrets from %q: %w", normalized, err)
+		return err
 	}
 
-	if len(secrets) == 0 {
-		log.Printf("warning: no secrets found at path %q", normalized)
+	existing, _ := s.reader.Read(targetFile)
+
+	diff := env.Diff(existing, incoming)
+	merged := env.Merge(existing, incoming)
+
+	if err := s.writer.Write(targetFile, merged); err != nil {
+		return err
 	}
 
-	bachedUp, err := s.writer.Write(outFile, secrets, backup)
-	if err != nil {
-		return nil, fmt.Errorf("writing env file %q: %w", outFile, err)
+	if s.audit != nil {
+		s.audit.Log(env.AuditEntry{
+			Timestamp: time.Now(),
+			Path:      path,
+			Added:     diff.Added,
+			Updated:   diff.Updated,
+			Unchanged: diff.Unchanged,
+		})
 	}
-
-	return &Result{
-		Path:       normalized,
-		Keyssynced: len(secrets),
-		BackedUp:   bachedUp,
-		OutputFile: outFile,
-	}, nil
+	return nil
 }

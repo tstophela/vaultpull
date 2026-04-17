@@ -1,78 +1,96 @@
-package sync_test
+package sync
 
 import (
-	"net/http"
-	"net/http/httptest"
+	"bytes"
+	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
-	"github.com/your-org/vaultpull/internal/env"
-	"github.com/your-org/vaultpull/internal/sync"
-	"github.com/your-org/vaultpull/internal/vault"
+	"github.com/user/vaultpull/internal/env"
 )
 
-func newMockVault(t *testing.T, response string) *httptest.Server {
-	t.Helper()
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(response))
-	}))
+type mockVault struct {
+	secrets map[string]string
+	err     error
+}
+
+func (m *mockVault) ReadSecrets(_ context.Context, _ string) (map[string]string, error) {
+	return m.secrets, m.err
+}
+
+func newMockVault(secrets map[string]string) *mockVault {
+	return &mockVault{secrets: secrets}
 }
 
 func TestSyncer_Sync_Success(t *testing.T) {
-	body := `{"data":{"data":{"API_KEY":"abc123","DB_PASS":"secret"}}}`
-	srv := newMockVault(t, body)
-	defer srv.Close()
+	dir := t.TempDir()
+	target := filepath.Join(dir, ".env")
 
-	client, err := vault.NewClient(srv.URL, "test-token")
+	v := newMockVault(map[string]string{"FOO": "bar", "BAZ": "qux"})
+	w := env.NewWriter(false)
+	r := env.NewReader()
+	logger := env.NewAuditLogger(nil)
+
+	s := New(v, w, r, logger)
+	if err := s.Sync(context.Background(), "secret/app", target); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	data, err := os.ReadFile(target)
 	if err != nil {
-		t.Fatalf("NewClient: %v", err)
+		t.Fatalf("file not created: %v", err)
 	}
-
-	tmpDir := t.TempDir()
-	outFile := filepath.Join(tmpDir, ".env")
-	writer := env.NewWriter()
-
-	s := sync.New(client, writer)
-	result, err := s.Sync("secret", "myapp", outFile, false)
-	if err != nil {
-		t.Fatalf("Sync: %v", err)
-	}
-
-	if result.Keyssynced != 2 {
-		t.Errorf("expected 2 keys synced, got %d", result.Keyssynced)
-	}
-	if result.BackedUp {
-		t.Error("expected no backup")
-	}
-
-	data, err := os.ReadFile(outFile)
-	if err != nil {
-		t.Fatalf("reading output: %v", err)
-	}
-	if len(data) == 0 {
-		t.Error("output file is empty")
+	if !strings.Contains(string(data), "FOO=") {
+		t.Error("expected FOO in output")
 	}
 }
 
 func TestSyncer_Sync_WithBackup(t *testing.T) {
-	body := `{"data":{"data":{"FOO":"bar"}}}`
-	srv := newMockVault(t, body)
-	defer srv.Close()
+	dir := t.TempDir()
+	target := filepath.Join(dir, ".env")
+	_ = os.WriteFile(target, []byte("EXISTING=yes\n"), 0600)
 
-	client, _ := vault.NewClient(srv.URL, "tok")
-	tmpDir := t.TempDir()
-	outFile := filepath.Join(tmpDir, ".env")
-	_ = os.WriteFile(outFile, []byte("OLD=value\n"), 0600)
+	v := newMockVault(map[string]string{"NEW_KEY": "value"})
+	w := env.NewWriter(true)
+	r := env.NewReader()
 
-	s := sync.New(client, env.NewWriter())
-	result, err := s.Sync("secret", "app", outFile, true)
-	if err != nil {
-		t.Fatalf("Sync: %v", err)
+	s := New(v, w, r, nil)
+	if err := s.Sync(context.Background(), "secret/app", target); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	if !result.BackedUp {
-		t.Error("expected backup to be created")
+
+	entries, _ := os.ReadDir(dir)
+	var hasBackup bool
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".bak") {
+			hasBackup = true
+		}
+	}
+	if !hasBackup {
+		t.Error("expected backup file")
+	}
+}
+
+func TestSyncer_Sync_AuditOutput(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, ".env")
+
+	v := newMockVault(map[string]string{"ALPHA": "1"})
+	w := env.NewWriter(false)
+	r := env.NewReader()
+
+	var buf bytes.Buffer
+	logger := env.NewAuditLogger(&buf)
+
+	s := New(v, w, r, logger)
+	_ = s.Sync(context.Background(), "secret/myapp", target)
+
+	if !strings.Contains(buf.String(), "secret/myapp") {
+		t.Error("expected audit entry for path")
+	}
+	if !strings.Contains(buf.String(), "+ ALPHA") {
+		t.Error("expected ALPHA as added key in audit")
 	}
 }
