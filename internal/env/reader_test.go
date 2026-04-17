@@ -63,3 +63,17 @@ func TestReader_Read_MissingFile(t *testing.T) {
 		t.Errorf("expected empty map, got %v", got)
 	}
 }
+
+func TestReader_Read_EmptyValues(t *testing.T) {
+	p := writeEnvFile(t, "KEY=\nOTHER=val\n")
+	got, err := NewReader(p).Read()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got["KEY"] != "" {
+		t.Errorf("expected empty string for KEY, got %q", got["KEY"])
+	}
+	if got["OTHER"] != "val" {
+		t.Errorf("expected val for OTHER, got %q", got["OTHER"])
+	}
+}
