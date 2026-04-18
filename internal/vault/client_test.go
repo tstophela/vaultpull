@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yourorg/vaultpull/internal/vault"
+	"github.com/user/vaultpull/internal/vault"
 )
 
 func newMockVault(t *testing.T, path string, body interface{}) *httptest.Server {

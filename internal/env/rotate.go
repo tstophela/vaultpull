@@ -36,14 +36,30 @@ func (r *Rotator) Detect(existing, incoming map[string]string) []RotationRecord 
 		if !exists || oldVal == newVal {
 			continue
 		}
+		oldDisplay := oldVal
+		if r.redactor.IsSensitive(key) {
+			oldDisplay = r.redactValue(oldVal)
+		}
+		newDisplay := newVal
+		if r.redactor.IsSensitive(key) {
+			newDisplay = r.redactValue(newVal)
+		}
 		records = append(records, RotationRecord{
 			Key:       key,
-			OldValue:  r.redactor.Redact(key, oldVal),
-			NewValue:  r.redactor.Redact(key, newVal),
+			OldValue:  oldDisplay,
+			NewValue:  newDisplay,
 			RotatedAt: r.now(),
 		})
 	}
 	return records
+}
+
+// redactValue masks all but the last 4 characters of a value.
+func (r *Rotator) redactValue(v string) string {
+	if len(v) <= 4 {
+		return "****"
+	}
+	return "****" + v[len(v)-4:]
 }
 
 // Summary returns a human-readable summary of rotation records.

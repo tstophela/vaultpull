@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/vaultpull/internal/env"
+	"github.com/user/vaultpull/internal/env"
 )
 
 var snapshotCmd = &cobra.Command{

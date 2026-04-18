@@ -1,5 +1,7 @@
 package env
 
+import "fmt"
+
 // Strategy controls how incoming secrets are merged with existing env values.
 type Strategy int
 

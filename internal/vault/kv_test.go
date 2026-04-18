@@ -3,7 +3,7 @@ package vault_test
 import (
 	"testing"
 
-	"github.com/yourorg/vaultpull/internal/vault"
+	"github.com/user/vaultpull/internal/vault"
 )
 
 func TestNormalizePath_KVv1(t *testing.T) {

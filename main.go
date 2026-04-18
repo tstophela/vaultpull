@@ -1,15 +1,9 @@
 package main
 
 import (
-	"fmt"
-	"os"
-
-	"github.com/your-org/vaultpull/cmd"
+	"github.com/user/vaultpull/cmd"
 )
 
 func main() {
-	if err := cmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
+	cmd.Execute()
 }

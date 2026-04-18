@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/your-org/vaultpull/cmd"
+	"github.com/user/vaultpull/cmd"
 )
 
 func TestExecute_MissingToken(t *testing.T) {
