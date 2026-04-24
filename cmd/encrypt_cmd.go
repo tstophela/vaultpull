@@ -17,7 +17,15 @@ var (
 var encryptCmd = &cobra.Command{
 	Use:   "encrypt [value]",
 	Short: "Encrypt or decrypt a secret value using AES-GCM",
-	Args:  cobra.ExactArgs(1),
+	Long: `Encrypt or decrypt a secret value using AES-256-GCM.
+
+The passphrase is derived into a 32-byte key using SHA-256.
+Encrypted values are base64-encoded and can be stored safely in config files.
+
+Examples:
+  vaultpull encrypt mysecret --passphrase mykey
+  vaultpull encrypt <ciphertext> --passphrase mykey --decrypt`,
+	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if encryptPassphrase == "" {
 			encryptPassphrase = os.Getenv("VAULTPULL_ENCRYPT_KEY")
